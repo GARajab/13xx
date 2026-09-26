@@ -1,0 +1,247 @@
+<!doctype html>
+<html lang="en" manifest="cache.appcache">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Rajab</title>
+  <style>
+    html,
+    body {
+      margin: 0;
+      padding: 0;
+      min-height: 100%;
+      background: #0b0d10;
+      color: #c8ced8;
+      font:
+        15px/1.45 "Segoe UI",
+        system-ui,
+        sans-serif;
+    }
+
+    #brand {
+      text-align: center;
+      padding: 8px 10px;
+      background: #0e1116;
+      border-bottom: 1px solid #1e2732;
+    }
+
+    #brand b {
+      font-size: 15px;
+      font-weight: 700;
+      letter-spacing: 0.14em;
+      color: #e6ebf2;
+      vertical-align: middle;
+    }
+
+    /* ---- progress bar (replaces the old spinner) ---- */
+    #prog {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      width: 72%;
+      max-width: 420px;
+      transform: translate(-50%, -50%);
+      text-align: center;
+    }
+
+    #bar {
+      position: relative;
+      width: 100%;
+      height: 14px;
+      background: #151a21;
+      border: 1px solid #1e2732;
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    #fill {
+      position: absolute;
+      top: 0;
+      left: 0;
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, #4fae7a, #7fd0a0);
+      border-radius: 7px;
+      transition: width 0.25s ease;
+    }
+
+    #pct {
+      margin-top: 10px;
+      font-size: 20px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      color: #e6ebf2;
+      font-variant-numeric: tabular-nums;
+    }
+
+    #label {
+      margin-top: 4px;
+      font-size: 12px;
+      color: #8b95a3;
+      min-height: 15px;
+      letter-spacing: 0.3px;
+    }
+
+    #msg {
+      position: fixed;
+      top: 50%;
+      left: 0;
+      right: 0;
+      transform: translateY(-50%);
+      text-align: center;
+      font-size: 16px;
+      letter-spacing: 0.5px;
+      display: none;
+    }
+
+    #wrap {
+      padding: 0;
+    }
+
+    #state,
+    #out {
+      display: none;
+    }
+
+    body.done #prog {
+      display: none;
+    }
+
+    body.done #msg {
+      display: block;
+    }
+
+    body.fail #prog {
+      display: none;
+    }
+
+    body.fail #msg {
+      display: block;
+    }
+
+    /* ?log=1 -- the full step log, styled like the landing. */
+    body.log #prog,
+    body.log #msg {
+      display: none;
+    }
+
+    body.log #wrap {
+      padding: 14px 18px;
+    }
+
+    body.log #state {
+      display: block;
+      font-size: 22px;
+      font-weight: 700;
+      margin: 0 0 8px;
+    }
+
+    body.log #out {
+      display: block;
+      white-space: pre-wrap;
+      font:
+        12px/1.45 Consolas,
+        monospace;
+      background: #11151b;
+      border: 1px solid #1e2732;
+      border-radius: 5px;
+      padding: 10px 12px;
+      height: calc(100vh - 141px);
+      overflow-y: auto;
+    }
+
+    .ok {
+      color: #7fd0a0;
+    }
+
+    .bad {
+      color: #d08a7f;
+    }
+
+    .warn {
+      color: #d8c07f;
+    }
+
+    .safe {
+      color: #7fd0a0;
+    }
+
+    .danger {
+      color: #d08a7f;
+    }
+
+    code {
+      color: #9fb3d0;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="brand">
+    <b>Rajab</b>
+  </div>
+
+  <!-- live progress bar -->
+  <div id="prog">
+    <div id="bar">
+      <div id="fill"></div>
+    </div>
+    <div id="pct">0%</div>
+    <div id="label">starting…</div>
+  </div>
+
+  <div id="msg" style="color: #7fd0a0;">Jailbroken</div>
+  <div id="wrap">
+    <div id="state"></div>
+    <div id="out"></div>
+  </div>
+
+  <script>
+    // ---- progress API that jb.js drives ----
+    // window.progress(pct, label)     -> set bar to pct (0..100), optional label
+    // window.progressDone()           -> body.done  (show "Restart your console")
+    // window.progressFail(text)       -> body.fail  (show message)
+    (function () {
+      var fill = document.getElementById("fill");
+      var pctEl = document.getElementById("pct");
+      var labelEl = document.getElementById("label");
+      var msgEl = document.getElementById("msg");
+
+      function clamp(n) {
+        n = Number(n);
+        if (!isFinite(n)) n = 0;
+        return Math.max(0, Math.min(100, n));
+      }
+
+      window.progress = function (pct, label) {
+        var p = clamp(pct);
+        fill.style.width = p + "%";
+        pctEl.textContent = Math.round(p) + "%";
+        if (typeof label === "string" && label.length) {
+          labelEl.textContent = label;
+        }
+      };
+
+      window.progressDone = function () {
+        window.progress(100, "done");
+        document.body.classList.remove("fail");
+        document.body.classList.add("done");
+      };
+
+      window.progressFail = function (text) {
+        if (typeof text === "string" && text.length) {
+          msgEl.textContent = text;
+        }
+        document.body.classList.remove("done");
+        document.body.classList.add("fail");
+      };
+    })();
+  </script>
+
+  <script type="module">
+    import "./jb.js?v=10";
+  </script>
+</body>
+
+</html>

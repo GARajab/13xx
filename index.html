@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en" manifest="cache.appcache">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>RAW GAME</title>
+    <style>
+        html,
+        body {
+            margin: 0;
+            padding: 0;
+            background: #0b0d10;
+            color: #c8ced8;
+            font: 15px/1.45 "Segoe UI", system-ui, sans-serif;
+        }
+
+        #wrap {
+            padding: 16px 18px;
+        }
+
+        #state {
+            font-size: 22px;
+            font-weight: 700;
+            margin: 0 0 6px;
+        }
+
+        #det {
+            font-size: 13px;
+            color: #8b95a3;
+            margin: 0 0 4px;
+        }
+
+        #det b {
+            color: #c8ced8;
+            font-weight: 600;
+        }
+
+        #cache {
+            font-size: 12px;
+            color: #5c6672;
+            margin: 0 0 10px;
+            min-height: 14px;
+        }
+
+        #cache.cacheok {
+            color: #7fd0a0;
+        }
+
+        .ok {
+            color: #7fd0a0;
+        }
+
+        .bad {
+            color: #d08a7f;
+        }
+
+        .warn {
+            color: #d8c07f;
+        }
+
+        #brand {
+            text-align: center;
+            padding: 8px 10px;
+            background: #0e1116;
+            border-bottom: 1px solid #1e2732;
+        }
+
+        #brand img {
+            width: 28px;
+            height: 28px;
+            margin-right: 8px;
+            border-radius: 50%;
+            vertical-align: middle;
+        }
+
+        #brand b {
+            font-size: 15px;
+            font-weight: 700;
+            letter-spacing: .14em;
+            color: #e6ebf2;
+            vertical-align: middle;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="wrap">
+        <div id="state">detecting firmware...</div>
+        <div id="det"></div>
+        <div id="cache"></div>
+    </div>
+
+    <script>
+        (function () {
+            var stateEl = document.getElementById("state");
+            var detEl = document.getElementById("det");
+            var cacheEl = document.getElementById("cache");
+            function setState(t, c) { stateEl.textContent = t; stateEl.className = c || ""; }
+            function setCache(t, ok) { cacheEl.textContent = t; cacheEl.className = ok ? "cacheok" : ""; }
+            var params = new URLSearchParams(location.search);
+
+            // Firmwares this build has a MEASURED kernel table for. jb.js still runs its
+            // own kernel-table-present gate, so this is UX only. KEEP IN SYNC with
+            // ps4_offsets.js: add a fwnum here in the SAME commit that fills that
+            // firmware's kernel RVAs.
+            // The PS4 reports its minor as two hex digits in the UA (13.52 -> minor 0x52).
+            var SUPPORTED = { 1302: 1, 1304: 1, 1350: 1, 1352: 1 }; // all measured on hardware
+
+            var key = null, fwnum = null;
+            var m = /PlayStation\s+4[\/ ](\d+)\.(\d+)/.exec(navigator.userAgent);
+            if (m) {
+                var ms = parseInt(m[2], 16).toString(16);
+                if (ms.length < 2) ms = "0" + ms;
+                key = m[1] + "." + ms;
+                fwnum = parseInt(m[1], 10) * 100 + parseInt(ms, 10);
+            }
+
+            var forced = params.get("force") === "1";
+            var supported = forced || (fwnum !== null && SUPPORTED[fwnum] === 1);
+            detEl.innerHTML = "firmware <b>" + (key || "unknown") + "</b>"
+                + (supported ? " &middot; <b>supported</b>"
+                    : " &middot; not in this build's kernel table");
+
+            var target = "jb.html" + location.search;
+            var moved = false;
+            function go() {
+                if (moved) return;
+                moved = true;
+                setState(supported ? "loading jailbreak..." : "UNSUPPORTED FIRMWARE",
+                    supported ? "warn" : "bad");
+                location.replace(target);
+            }
+
+            // ---- CACHE-FIRST PIPELINE (mandatory, fully automatic) ----
+            // Rule: jb.html is only ever reached *through* the cache step below.
+            // No user input is required at any point.
+
+            var ac = window.applicationCache;
+            if (!ac || !document.documentElement.hasAttribute("manifest")) {
+                // No AppCache support in this browser. Cache cannot be performed, so
+                // we still do not bypass it silently -- report and proceed.
+                setCache("cache unsupported by this browser", false);
+                go();
+                return;
+            }
+
+            function proceed() {
+                if (moved) return;
+                setCache(cacheEl.textContent || "cached", true);
+                go();
+            }
+
+            // If the cache is already fully populated and no update is pending,
+            // we can go straight through.
+            if (ac.status === ac.IDLE) {
+                setCache("cached", true);
+                go();
+                return;
+            }
+
+            // An update is already staged: swap it in, then reload once so the
+            // freshly cached assets are the ones that boot jb.html.
+            if (ac.status === ac.UPDATEREADY) {
+                try { ac.swapCache(); } catch (e) { }
+                setCache("update downloaded -- reloading", true);
+                location.reload();
+                return;
+            }
+
+            // Otherwise we are in CHECKING / DOWNLOADING / OBSOLETE / UNCACHED.
+            // Wait for the cache to settle, then move to jb.html automatically.
+            setCache("checking cache...");
+
+            ac.addEventListener("downloading", function () {
+                setCache("caching for offline (first run)...");
+            }, false);
+
+            ac.addEventListener("progress", function (e) {
+                if (e && e.total)
+                    setCache("caching " + Math.round((e.loaded / e.total) * 100) + "%");
+            }, false);
+
+            ac.addEventListener("cached", function () {
+                setCache("cached for offline use", true);
+                proceed();
+            }, false);
+
+            ac.addEventListener("updateready", function () {
+                try { ac.swapCache(); } catch (e) { }
+                setCache("update downloaded -- reloading", true);
+                location.reload();
+            }, false);
+
+            ac.addEventListener("noupdate", function () {
+                setCache("cached -- offline ready", true);
+                proceed();
+            }, false);
+
+            // On error / obsolete, do NOT jump ahead of the cache step. Keep waiting
+            // for a terminal cache event so the mandatory cache can still complete.
+            ac.addEventListener("error", function () {
+                setCache("cache error -- retrying", false);
+            }, false);
+
+            ac.addEventListener("obsolete", function () {
+                setCache("cache obsolete -- reloading", false);
+                location.reload();
+            }, false);
+
+            // Safety net: if the PS4's AppCache fires none of the above within 20s,
+            // fall through so the user is never permanently stuck on this page.
+            setTimeout(function () {
+                if (!moved) {
+                    setCache("cache timeout -- proceeding", true);
+                    proceed();
+                }
+            }, 20000);
+        })();
+    </script>
+</body>
+
+</html>
